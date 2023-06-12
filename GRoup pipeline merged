@@ -1,0 +1,181 @@
+# Rule: Download Raw Data
+rule download_raw_data:
+    output:
+        "raw_data/{sample}.sra"
+    shell:
+        "prefetch {sample} && fastq-dump --outdir raw_data --split-files {output}"
+        
+        
+# Snakemake RNA-Seq Analysis Pipeline
+
+# Rule: Quality Control
+rule quality_control:
+    input:
+        "raw_data/{sample}.fastq.gz"
+    output:
+        "qc/{sample}_fastqc.html"
+    shell:
+        "fastqc {input} -o qc/"
+        
+        
+    # Snakemake HISAT2 Genome Indexing Pipeline
+
+# Rule: Download Reference Genome
+rule download_genome:
+    output:
+        "genome/genome/Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa"
+    shell:
+        "wget -O {output} genome/Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa"
+
+# Rule: Indexing
+rule index_genome:
+    input:
+        "genome/genome/Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa"
+    output:
+        "genome/reference_genome"
+    shell:
+        "hisat2-build {input} {output}"
+
+# Define the reference genome filename
+reference_genome = "genome/reference_genome.fa"
+
+# Define the output index files
+index_files = [
+    "genome/reference_genome.1.ht2",
+    "genome/reference_genome.2.ht2",
+    "genome/reference_genome.3.ht2",
+    "genome/reference_genome.4.ht2",
+    "genome/reference_genome.5.ht2",
+    "genome/reference_genome.6.ht2",
+    "genome/reference_genome.7.ht2",
+    "genome/reference_genome.8.ht2"
+]
+
+# Rule: All
+rule all:
+    input:
+        reference_genome,
+        index_files
+# Snakemake HISAT2 Genome Indexing Pipeline
+
+# Rule: Download Reference Genome
+rule download_genome:
+    output:
+        "genome/genome/Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa"
+    shell:
+        " && wget https://ftp.ensembl.org/pub/release-109/gtf/homo_sapiens/Homo_sapiens.GRCh38.109.chr.gtf.gz"
+        " && gunzip -k Homo_sapiens.GRCh38.109.chr.gtf.gz
+
+rule build_index:
+    input:
+        "genome.fa"
+    output:
+        "genome_index"
+    shell:
+        """
+        hisat2-build {input} {output}
+        """
+    (SAMPLES,)=glob_wildcards("Reads/{sample}_1.fastq.gz") 
+# Target rule to generate all alignments
+rule all:
+    input:
+        expand("alignment/{sample}.sam", sample=SAMPLES),
+        expand("alignment/{sample1}_{sample2}.sam", sample1=SAMPLES, sample2=SAMPLES)
+
+
+# Rule for single alignment
+rule align_single:
+    input:
+        fastq="Reads/{sample}.fastq.gz",
+        index="hisat2/genome_hisat2.idx"
+    output:
+        sam="alignment/{sample}.sam"
+    params:
+        threads=8
+    shell:
+        """
+        hisat2 -p {params.threads} -x {input.index} -U {input.fastq} -S {output.sam}
+        """
+
+# Rule for pairwise alignment
+rule align_pairwise:
+    input:
+        sam1="alignment/{sample1}.sam",
+        sam2="alignment/{sample2}.sam",
+        index="hisat2/genome_hisat2.idx"
+    output:
+        sam="alignment/{sample}.sam"
+    params:
+        threads=8
+    shell:
+        """
+        hisat2 -p {params.threads} -x {input.index} -1 {input.sam1} -2 {input.sam2} -S {output.sam}
+        """
+
+# Snakefile
+
+    (SAMPLE,)=glob_wildcards("hisat2/{sample}.sam")
+
+rule all:
+    input:
+        expand("hisat2/{sample}_hisat2_sorted.bam",sample=SAMPLE),
+        
+                
+rule convert_samtobam:
+    input:
+        "hisat2/{sample}.sam"
+    output:
+        "hisat2/{sample}_hisat2_sorted.bam"
+    threads:
+        8
+    shell:
+        """
+           samtools view -@ {threads} -b -o {output} {input}
+        """
+   rule index_bam:
+    input:
+        hisat2/sorted.bam"
+    output:
+        "hisat2/sorted.bam.bai"
+    shell:
+        """
+        samtools index {input}
+        """
+#Feature counts
+featureCounts -a Homo_sapiens.GRCh38.99.gtf -o SRR17333017.txt SRR17333017.sorted.bam
+   
+  #normalisation.
+```{r}
+BiocManager::install("edgeR")
+```
+
+```{r}
+library(edgeR)
+```
+
+```{r}
+counts <- read.csv("counts.csv", header = TRUE, row.names = 1)
+
+```
+
+
+
+```{r}
+dge <- DGEList(counts = counts)
+```
+
+```{r}
+dge <- calcNormFactors(dge)
+```
+
+```{r}
+dge <- glmFit(dge)
+dge <- glmLRT(dge)
+
+```
+
+
+```{r}
+de_genes <- topTags(dge, n = Inf, p.value = 0.05)$table
+
+```
